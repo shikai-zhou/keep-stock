@@ -8,6 +8,11 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 logger = logging.getLogger(__name__)
 
+TOKEN = None
+
+with open("token.txt") as f:
+    TOKEN = f.read().strip()
+
 make_persistence = PicklePersistence(filename='data')
 
 def build_menu(buttons,
@@ -26,7 +31,8 @@ stocks = dict()
 
 
 def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Welcome! This is the keep-stock bot, a bot to help you keep track of current stock market prices. Use /add SYMBOL to add a new stock for me to keep track or use /show to see what is in my memory.")
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Welcome! I am keep-stock bot, a bot to help you keep track of current stock market prices."+
+    " Use /add SYMBOL to add a new stock for me to keep track or use /show to see details for any particular stock. Use /delete SYMBOL to remove a stock from my memory")
 
 def echo(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
@@ -93,7 +99,7 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    updater = Updater(token='1512157486:AAFUjgYJNwFq3kUsm_3K_BYvf670rWKD6eI', persistence=make_persistence, use_context=True)
+    updater = Updater(token=TOKEN, persistence=make_persistence, use_context=True)
     
     # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
