@@ -2,8 +2,8 @@ import telegram
 import yfinance as yf
 from telegram import ReplyKeyboardMarkup, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, ConversationHandler,  MessageHandler, Filters, CallbackContext, CallbackQueryHandler, PicklePersistence
-
 import logging
+
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',level=logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -31,16 +31,17 @@ stocks = dict()
 
 
 def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Welcome! I am keep-stock bot, a bot to help you keep track of current stock market prices."+
-    " Use /add SYMBOL to add a new stock for me to keep track or use /show to see details for any particular stock. Use /delete SYMBOL to remove a stock from my memory")
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Welcome! I am keep-stock bot, a bot to help you keep track of current stock market prices. "+
+    "Use /add SYMBOL to add a new stock for me to keep track or use /show to see details for any particular stock. Use /delete SYMBOL to remove a stock from my memory "+
+    "and use /update to retrieve the most recent information")
 
 def echo(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
 
 def add(update, context):
-    reply = context.args[0]
-    #context.bot.send_message(chat_id=update.effective_chat.id, text=reply)
     try:
+        reply = context.args[0]
+    
         entry = yf.Ticker(reply)
         entry.info
         # Add the new entry into the stocks dictionary
@@ -49,7 +50,13 @@ def add(update, context):
     except Exception:
         update.message.reply_text("Please add a new entry by using '/add SYMBOL' or your ticker symbol is not found")
 
-    
+def delete(update, context):
+    name = context.args[0]
+    try:
+        stocks.pop(name)
+        update.message.reply_text(name + " is deleted from the list")
+    except Exception:
+        update.message.reply_text("Error, I cannot find an entry with the symbol "+name)
     
 def show(update, context):
     # Display the list of stocks
@@ -58,6 +65,10 @@ def show(update, context):
     for key in stocks:
         list_of_stocks.append(key)
         
+    if len(list_of_stocks) == 0:
+        update.message.reply_text("The list is empty. Use /add to add new entries")
+        return
+
     button_list = []
     for each in list_of_stocks:
        button_list.append(InlineKeyboardButton(each, callback_data = each))
@@ -65,31 +76,37 @@ def show(update, context):
     context.bot.send_message(chat_id=update.message.chat_id, text='Choose from the following',reply_markup=reply_markup)
 
 
-
-def price(update, context):
-    stock_name = context.args[0]
-    try:
-        stock = stocks[stock_name]
-    except Exception:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Sorry, I cannot find the stock in my list, use /show to see the entries in my list")
-
-    button_list = [
-    InlineKeyboardButton("Price", callback_data='get-price'),
-    InlineKeyboardButton("Details", callback_data='get-details')
-    ]
-    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
-    context.bot.send_message(chat_id=update.effective_chat.id, text="", reply_markup=reply_markup)
-
     
 def price_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
-    context.bot.send_message(query.message.chat_id, text=f"Selected Option: {query.data}")
     symbol = query.data
-    stock = stocks[symbol]
-    reply = stock.info
-    for i in reply:
-        context.bot.send_message(query.message.chat_id, text=i+": "+str(reply[i]))
+
+    if symbol.startswith("more"):
+        new_symbol = symbol.replace('more', '')
+        context.bot.send_message(query.message.chat_id, text="Selected Option: "+new_symbol)
+        stock = stocks[new_symbol]
+        reply = stock.info
+        for i in reply:
+            context.bot.send_message(query.message.chat_id, text=i+": "+str(reply[i]))
+        
+    else:
+        context.bot.send_message(query.message.chat_id, text=f"Selected Option: {query.data}")
+        stock = stocks[symbol]
+        reply = stock.info
+        #context.bot.send_message(query.message.chat_id, text="previousClose: "+ reply["previousClose"] + "\nregularMarketOpen: "+reply["regularMarketOpen"])
+        button_list = [
+        InlineKeyboardButton("more", callback_data='more'+str(symbol))
+        ]
+        reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="previousClose: "+ str(reply["previousClose"]) + "\nregularMarketOpen: "+str(reply["regularMarketOpen"]), reply_markup=reply_markup)
+
+
+def update_info(update, context):
+    for key in stocks:
+        stocks[key] = yf.Ticker(key)
+
+    update.message.reply_text("Success!")
 
 
 def unknown(update, context):
@@ -110,11 +127,14 @@ def main():
     # Add a new entry
     dispatcher.add_handler(CommandHandler("add", add))
 
+    # Delete an entry
+    dispatcher.add_handler(CommandHandler("delete", delete))
+
     # Show the details and all the entries
     dispatcher.add_handler(CommandHandler("show", show))
 
-    # Show the price
-    dispatcher.add_handler(CommandHandler("price", price))
+    # Update to the lastest data 
+    dispatcher.add_handler(CommandHandler("update", update_info))
 
     # Add unknown
     dispatcher.add_handler(MessageHandler(Filters.command, unknown))
